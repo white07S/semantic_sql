@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-MVNW="${PROJECT_ROOT}/mvnw"
+MAVEN_CMD="mvn"
 LOCAL_REPO="${PROJECT_ROOT}/.offline-m2"
 DEFAULT_CONFIG="${PROJECT_ROOT}/docker/etc/config.properties"
 GO_OFFLINE_PLUGIN="de.qaware.maven:go-offline-maven-plugin:1.2.8:resolve-dependencies"
@@ -17,8 +17,8 @@ die() {
   exit 1
 }
 
-if [[ ! -x "$MVNW" ]]; then
-  die "Cannot find executable Maven wrapper at $MVNW"
+if ! command -v "$MAVEN_CMD" >/dev/null 2>&1; then
+  die "Cannot find maven executable '$MAVEN_CMD' in PATH"
 fi
 
 CONFIG_FILE="$DEFAULT_CONFIG"
@@ -102,13 +102,13 @@ MAVEN_ARGS=(-Dmaven.repo.local="$LOCAL_REPO" -P "$MAVEN_PROFILE" -DskipTests)
 
 if [[ "$MODE" == 'online' ]]; then
   log 'INFO' 'Resolving dependencies for offline use'
-  "$MVNW" "${MAVEN_ARGS[@]}" "$GO_OFFLINE_PLUGIN"
-  "$MVNW" "${MAVEN_ARGS[@]}" dependency:go-offline
+  "$MAVEN_CMD" "${MAVEN_ARGS[@]}" "$GO_OFFLINE_PLUGIN"
+  "$MAVEN_CMD" "${MAVEN_ARGS[@]}" dependency:go-offline
   log 'INFO' 'Building executable jar (online)'
-  "$MVNW" "${MAVEN_ARGS[@]}" clean install
+  "$MAVEN_CMD" "${MAVEN_ARGS[@]}" clean install
 else
   log 'INFO' 'Offline build using cached repository'
-  "$MVNW" -o "${MAVEN_ARGS[@]}" install
+  "$MAVEN_CMD" -o "${MAVEN_ARGS[@]}" install
 fi
 
 JAR_PATH="$(ls -1t "${PROJECT_ROOT}"/wren-server/target/wren-server-*-executable.jar 2>/dev/null | head -n1 || true)"
