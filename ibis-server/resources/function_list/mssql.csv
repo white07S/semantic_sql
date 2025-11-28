@@ -1,0 +1,7 @@
+function_type,name,return_type,param_names,param_types,description
+scalar,getdate,Datetime,,,"Returns current date and time."
+scalar,getutcdate,Datetime,,,"Returns current UTC date and time."
+scalar,sysdatetime,Datetime,,,"Returns date and time of SQL Server."
+scalar,host_name,String,,,"Returns workstation name."
+scalar,newid,String,,,"Returns new GUID."
+scalar,user_name,String,,,"Returns database user name."
