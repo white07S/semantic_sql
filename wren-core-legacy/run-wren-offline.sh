@@ -2,11 +2,24 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-MAVEN_CMD="mvn"
 LOCAL_REPO="${PROJECT_ROOT}/.offline-m2"
 DEFAULT_CONFIG="${PROJECT_ROOT}/docker/etc/config.properties"
 GO_OFFLINE_PLUGIN="de.qaware.maven:go-offline-maven-plugin:1.2.8:resolve-dependencies"
 MAVEN_PROFILE="exec-jar"
+
+# Runtime Configuration
+RUNTIME_DIR="${PROJECT_ROOT}/runtime"
+DOWNLOAD_DIR="${RUNTIME_DIR}/downloads"
+INSTALL_DIR="${RUNTIME_DIR}/install"
+
+MAVEN_URL="https://dlcdn.apache.org/maven/maven-3/3.9.11/binaries/apache-maven-3.9.11-bin.zip"
+
+# Java URLs
+JAVA_URL_LINUX="https://download.java.net/java/GA/jdk21.0.2/f2283984656d49d69e91c558476027ac/13/GPL/openjdk-21.0.2_linux-x64_bin.tar.gz"
+JAVA_URL_MAC_ARM64="https://download.java.net/java/GA/jdk21.0.2/f2283984656d49d69e91c558476027ac/13/GPL/openjdk-21.0.2_macos-aarch64_bin.tar.gz"
+JAVA_URL_MAC_X64="https://download.java.net/java/GA/jdk21.0.2/f2283984656d49d69e91c558476027ac/13/GPL/openjdk-21.0.2_macos-x64_bin.tar.gz"
+
+MAVEN_ZIP="${DOWNLOAD_DIR}/maven.zip"
 
 log() {
   printf '[%s] %s\n' "$1" "$2"
@@ -17,9 +30,13 @@ die() {
   exit 1
 }
 
-if ! command -v "$MAVEN_CMD" >/dev/null 2>&1; then
-  die "Cannot find maven executable '$MAVEN_CMD' in PATH"
-fi
+cleanup() {
+  if [[ -d "$INSTALL_DIR" ]]; then
+    log 'INFO' "Cleaning up runtime installations..."
+    rm -rf "$INSTALL_DIR"
+  fi
+}
+trap cleanup EXIT
 
 CONFIG_FILE="$DEFAULT_CONFIG"
 MODE_OVERRIDE=""
@@ -96,19 +113,103 @@ detect_mode() {
 MODE="$(detect_mode)"
 log 'INFO' "Detected mode: $MODE"
 
+setup_runtime() {
+  mkdir -p "$DOWNLOAD_DIR"
+  # Clean install dir to prevent unzip prompts and ensure clean state
+  rm -rf "$INSTALL_DIR"
+  mkdir -p "$INSTALL_DIR"
+
+  # Download Maven if missing
+  if [[ ! -f "$MAVEN_ZIP" ]]; then
+    if [[ "$MODE" == "online" ]]; then
+       log 'INFO' "Downloading Maven..."
+       curl -L -o "$MAVEN_ZIP" "$MAVEN_URL"
+    else
+       die "Maven binary not found at $MAVEN_ZIP and we are in offline mode."
+    fi
+  fi
+
+  # Download Java (Linux - always ensure available for portability)
+  JAVA_TAR_LINUX="${DOWNLOAD_DIR}/java-linux-x64.tar.gz"
+  if [[ ! -f "$JAVA_TAR_LINUX" ]]; then
+     if [[ "$MODE" == "online" ]]; then
+         log 'INFO' "Downloading Java (Linux)..."
+         curl -L -o "$JAVA_TAR_LINUX" "$JAVA_URL_LINUX"
+     elif [[ "$(uname -s)" == "Linux" ]]; then
+         die "Java binary for Linux not found at $JAVA_TAR_LINUX and we are in offline mode."
+     fi
+  fi
+
+  # Determine current OS requirements
+  OS="$(uname -s)"
+  ARCH="$(uname -m)"
+  CURRENT_JAVA_TAR=""
+
+  if [[ "$OS" == "Darwin" ]]; then
+    if [[ "$ARCH" == "arm64" ]]; then
+       CURRENT_JAVA_TAR="${DOWNLOAD_DIR}/java-mac-arm64.tar.gz"
+       CURRENT_JAVA_URL="$JAVA_URL_MAC_ARM64"
+    else
+       CURRENT_JAVA_TAR="${DOWNLOAD_DIR}/java-mac-x64.tar.gz"
+       CURRENT_JAVA_URL="$JAVA_URL_MAC_X64"
+    fi
+    
+    # Download Mac Java if needed
+    if [[ ! -f "$CURRENT_JAVA_TAR" ]]; then
+        if [[ "$MODE" == "online" ]]; then
+            log 'INFO' "Downloading Java (macOS)..."
+            curl -L -o "$CURRENT_JAVA_TAR" "$CURRENT_JAVA_URL"
+        else
+            die "Java binary for macOS not found at $CURRENT_JAVA_TAR and we are in offline mode."
+        fi
+    fi
+  elif [[ "$OS" == "Linux" ]]; then
+      CURRENT_JAVA_TAR="$JAVA_TAR_LINUX"
+  else
+      die "Unsupported OS: $OS"
+  fi
+
+  # Extract Maven
+  log 'INFO' "Extracting Maven..."
+  unzip -q "$MAVEN_ZIP" -d "$INSTALL_DIR"
+  MAVEN_HOME_DIR="$(find "$INSTALL_DIR" -maxdepth 1 -type d -name "apache-maven*")"
+  
+  # Extract Java
+  log 'INFO' "Extracting Java..."
+  tar -xzf "$CURRENT_JAVA_TAR" -C "$INSTALL_DIR"
+  JAVA_HOME_DIR="$(find "$INSTALL_DIR" -maxdepth 1 -type d -name "jdk*")"
+  
+  if [[ "$OS" == "Darwin" ]] && [[ -d "$JAVA_HOME_DIR/Contents/Home" ]]; then
+    JAVA_HOME_DIR="$JAVA_HOME_DIR/Contents/Home"
+  fi
+
+  # Set Environment
+  export JAVA_HOME="$JAVA_HOME_DIR"
+  export PATH="$MAVEN_HOME_DIR/bin:$JAVA_HOME/bin:$PATH"
+  
+  log 'INFO' "Using Java from: $JAVA_HOME"
+  log 'INFO' "Using Maven from: $MAVEN_HOME_DIR"
+  
+  # Verify
+  java -version
+  mvn -version
+}
+
+setup_runtime
+
 mkdir -p "$LOCAL_REPO"
 
 MAVEN_ARGS=(-Dmaven.repo.local="$LOCAL_REPO" -P "$MAVEN_PROFILE" -DskipTests)
 
 if [[ "$MODE" == 'online' ]]; then
   log 'INFO' 'Resolving dependencies for offline use'
-  "$MAVEN_CMD" "${MAVEN_ARGS[@]}" "$GO_OFFLINE_PLUGIN"
-  "$MAVEN_CMD" "${MAVEN_ARGS[@]}" dependency:go-offline
+  mvn "${MAVEN_ARGS[@]}" "$GO_OFFLINE_PLUGIN"
+  mvn "${MAVEN_ARGS[@]}" dependency:go-offline
   log 'INFO' 'Building executable jar (online)'
-  "$MAVEN_CMD" "${MAVEN_ARGS[@]}" clean install
+  mvn "${MAVEN_ARGS[@]}" clean install
 else
   log 'INFO' 'Offline build using cached repository'
-  "$MAVEN_CMD" -o "${MAVEN_ARGS[@]}" install
+  mvn -o "${MAVEN_ARGS[@]}" install
 fi
 
 JAR_PATH="$(ls -1t "${PROJECT_ROOT}"/wren-server/target/wren-server-*-executable.jar 2>/dev/null | head -n1 || true)"
@@ -118,8 +219,7 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   die "Config file not found at ${CONFIG_FILE}"
 fi
 
-JAVA_BIN="${JAVA_HOME:+${JAVA_HOME}/bin/}java"
-JAVA_BIN="${JAVA_BIN:-java}"
+JAVA_BIN="${JAVA_HOME}/bin/java"
 
 CMD=("$JAVA_BIN" "-Dconfig=${CONFIG_FILE}" '--add-opens=java.base/java.nio=ALL-UNNAMED' '-jar' "$JAR_PATH")
 if [[ ${#JAVA_ARGS[@]} -gt 0 ]]; then
@@ -127,4 +227,4 @@ if [[ ${#JAVA_ARGS[@]} -gt 0 ]]; then
 fi
 
 log 'INFO' "Starting server from ${JAR_PATH}"
-exec "${CMD[@]}"
+"${CMD[@]}"
