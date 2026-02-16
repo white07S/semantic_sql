@@ -8,9 +8,9 @@ packages = [{ include = "app" }]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.12"
-fastapi = { version = "0.115.12", extras = ["standard"] }
-pydantic = "2.10.6"
-ibis-framework = { version = "10.3.1", extras = [
+fastapi = { version = "0.129.0", extras = ["standard"] }
+pydantic = "2.12.5"
+ibis-framework = { version = "12.0.0", extras = [
   "bigquery",
   "clickhouse",
   "mssql",
@@ -20,29 +20,29 @@ ibis-framework = { version = "10.3.1", extras = [
   "snowflake",
   "trino",
 ] }
-google-auth = "2.38.0"
+google-auth = "2.48.0"
 httpx = "0.28.1"
-python-dotenv = "1.0.1"
-orjson = "3.10.16"
-pandas = "2.2.3"
+python-dotenv = "1.2.1"
+orjson = "3.11.7"
+pandas = "3.0.0"
 sqlglot = { extras = [
   "rs",
 ], version = ">=23.4,<26.5" } # the version should follow the ibis-framework
 loguru = "0.7.3"
 asgi-correlation-id = "4.3.4"
-gql = { extras = ["aiohttp"], version = "3.5.2" }
-anyio = "4.9.0"
-duckdb = "1.2.1"
+gql = { extras = ["aiohttp"], version = "4.0.0" }
+anyio = "4.12.1"
+duckdb = "1.4.4"
 opendal = ">=0.45"
-oracledb = "3.0.0"
+oracledb = "3.4.2"
 mysqlclient = { version = ">=2.2.4,<3", optional = true }
 opentelemetry-api = ">=1.30.0"
 opentelemetry-sdk = ">=1.30.0"
 jinja2 = ">=3.1.6"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "8.3.5"
-testcontainers = { version = "4.9.2", extras = [
+pytest = "9.0.2"
+testcontainers = { version = "4.14.1", extras = [
   "clickhouse",
   "mssql",
   "mysql",
@@ -50,12 +50,12 @@ testcontainers = { version = "4.9.2", extras = [
   "trino",
   "minio",
 ] }
-sqlalchemy = "2.0.39"
-pre-commit = "4.2.0"
-ruff = "0.11.2"
+sqlalchemy = "2.0.46"
+pre-commit = "4.5.1"
+ruff = "0.15.1"
 trino = ">=0.321,<1"
 psycopg2 = ">=2.8.4,<3"
-clickhouse-connect = "0.8.15"
+clickhouse-connect = "0.10.0"
 asgi-lifespan = "2.1.0"
 
 [tool.pytest.ini_options]
